@@ -1,0 +1,9 @@
+node_modules/
+state/
+settings.local.json
+*.log
+*.bak
+*.tmp
+.env
+.env.*
+!.env.example
