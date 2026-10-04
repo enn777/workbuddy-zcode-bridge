@@ -1,7 +1,10 @@
 # Reinstall/update the bridge keepalive scheduled task.
 # Usage: powershell.exe -NoProfile -ExecutionPolicy Bypass -File install-task.ps1
-# Generates the task XML at runtime (no machine-specific file is committed),
- # registering as the current user without elevation via schtasks.
+# Generates, at install time: keepalive-hidden.vbs (runs node without ever
+# creating a console window) and the task XML (node path + current user).
+# A bare node.exe task action would flash a terminal window on the desktop
+# every run; wscript.exe is a GUI-subsystem host, so nothing is shown.
+# Registers as the current user without elevation via schtasks.
 $ErrorActionPreference = 'Stop'
 $keepaliveRoot = $PSScriptRoot
 $taskName = 'WorkBuddyZCode-BridgeKeepalive'
@@ -11,11 +14,24 @@ if (-not $nodePath) { throw 'node.exe was not found on PATH. Install Node.js 22+
 $keepaliveScript = Join-Path $keepaliveRoot 'keepalive.mjs'
 if (-not (Test-Path -LiteralPath $keepaliveScript)) { throw "keepalive.mjs not found: $keepaliveScript" }
 
+# --- hidden launcher (machine-specific, never committed) ---
+$launcherPath = Join-Path $keepaliveRoot 'keepalive-hidden.vbs'
+$nodeForVbs = $nodePath.Replace('"', '""')
+$launcher = @"
+Option Explicit
+Dim shell, fso, base
+Set shell = CreateObject("WScript.Shell")
+Set fso = CreateObject("Scripting.FileSystemObject")
+base = fso.GetParentFolderName(WScript.ScriptFullName)
+shell.Run """" & "$nodeForVbs" & """ """ & base & "\keepalive.mjs""", 0, True
+"@
+[System.IO.File]::WriteAllText($launcherPath, $launcher, [System.Text.Encoding]::ASCII)
+
+# --- task XML ---
 $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
 $userSid = $identity.User.Value
 $userName = $identity.Name
-$escScript = $keepaliveScript.Replace('&', '&amp;').Replace('<', '&lt;').Replace('>', '&gt;')
-$escNode = $nodePath.Replace('&', '&amp;').Replace('<', '&lt;').Replace('>', '&gt;')
+$escScript = $launcherPath.Replace('&', '&amp;').Replace('<', '&lt;').Replace('>', '&gt;')
 $escUser = $userName.Replace('&', '&amp;').Replace('<', '&lt;').Replace('>', '&gt;')
 $now = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
 
@@ -26,7 +42,7 @@ $xml = @"
     <Date>$now</Date>
     <Author>$escUser</Author>
     <URI>\$taskName</URI>
-    <Description>Keeps the WorkBuddy local bridges (see bridges.json) running and the ZCode provider model lists in sync.</Description>
+    <Description>Keeps the WorkBuddy local bridges (see bridges.json) running and the ZCode provider model lists in sync. Runs hidden via wscript so no console window flashes.</Description>
   </RegistrationInfo>
   <Principals>
     <Principal id="Author">
@@ -61,7 +77,7 @@ $xml = @"
   </Triggers>
   <Actions Context="Author">
     <Exec>
-      <Command>$escNode</Command>
+      <Command>wscript.exe</Command>
       <Arguments>"$escScript"</Arguments>
     </Exec>
   </Actions>
@@ -76,4 +92,4 @@ try {
 } finally {
     Remove-Item -LiteralPath $xmlPath -Force -ErrorAction SilentlyContinue
 }
-Write-Output "Scheduled task '$taskName' installed (every 5 minutes + at logon; node: $nodePath)."
+Write-Output "Scheduled task '$taskName' installed (every 5 minutes + at logon; hidden launcher: $launcherPath)."

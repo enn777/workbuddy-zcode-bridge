@@ -50,6 +50,11 @@ schtasks /Run /TN WorkBuddyZCode-BridgeKeepalive    # 手动触发
 - **不要用 PowerShell 实现 keepalive 主体**：在部分机器上，此类
   "HTTP 健康检查 + 隐藏窗口启动进程"的 PowerShell 脚本会被 AMSI/Defender
   启发式秒删。Node 脚本没有这个问题。
+- **计划任务也不要直接执行 node.exe**：node 是控制台程序，任务计划程序在
+  交互会话里启动它会每次在桌面闪现一个终端窗口（脚本跑几秒，窗口一闪而过）。
+  `install-task.ps1` 因此在安装时生成 `keepalive-hidden.vbs`（已被
+  `.gitignore` 排除，含本机 node 路径），由 GUI 子系统的 `wscript.exe`
+  以隐藏窗口样式启动 node，全程无任何窗口。
 - **比较 ZCode 配置必须忽略 JSON key 顺序**：ZCode 会按自己的键序重写
   `provider_config.json`，严格 stringify 比较会造成每 5 分钟一次的写盘循环。
   `configure-zcode.mjs` 已内置键序无关比较。
