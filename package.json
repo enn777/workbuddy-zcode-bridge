@@ -1,11 +1,11 @@
 {
   "name": "workbuddy-zcode-bridge",
   "version": "1.0.0",
-  "description": "Authenticated local WorkBuddy AI bridge for ZCode, based on dsh-workbuddy-connect.",
+  "description": "Authenticated local WorkBuddy (international + domestic) bridges for ZCode, based on dsh-workbuddy-connect.",
   "license": "MIT",
   "engines": { "node": ">=22" },
   "private": true,
   "type": "module",
-  "scripts": { "start": "node bridge.mjs", "configure": "node configure-zcode.mjs", "verify": "node verify.mjs", "test": "node --test tests/*.test.mjs" },
+  "scripts": { "start": "node bridge.mjs", "configure": "node keepalive/configure-zcode.mjs", "verify": "node verify.mjs", "test": "node --test tests/*.test.mjs" },
   "dependencies": { "dsh-workbuddy-connect": "0.7.1" }
 }

@@ -13,12 +13,12 @@ process.env.DSH_HOME = state;
 let settings = {};
 try { settings = JSON.parse((await readFile(join(root, 'settings.local.json'), 'utf8')).replace(/^\uFEFF/, '')); }
 catch (error) { if (error.code !== 'ENOENT') throw error; }
-if (!process.env.WORKBUDDY_AI_ELECTRON_BIN && settings.workbuddyElectronPath) {
-  process.env.WORKBUDDY_AI_ELECTRON_BIN = settings.workbuddyElectronPath;
+if (!process.env.WORKBUDDY_ELECTRON_BIN && settings.workbuddyElectronPath) {
+  process.env.WORKBUDDY_ELECTRON_BIN = settings.workbuddyElectronPath;
 }
-const { AI_VARIANT, WorkBuddyCredentialStore, WorkBuddyUpstreamClient, WorkBuddyCatalog, createWorkBuddyShim } = await import('dsh-workbuddy-connect');
+const { CN_VARIANT, WorkBuddyCredentialStore, WorkBuddyUpstreamClient, WorkBuddyCatalog, createWorkBuddyShim } = await import('dsh-workbuddy-connect');
 const client = new WorkBuddyUpstreamClient();
-const store = new WorkBuddyCredentialStore({ variant: AI_VARIANT, ownPath: join(state, 'credentials.json'), refresh: c => client.refreshToken(c) });
+const store = new WorkBuddyCredentialStore({ variant: CN_VARIANT, ownPath: join(state, 'credentials.json'), refresh: c => client.refreshToken(c) });
 const catalog = new WorkBuddyCatalog([]);
 catalog.setUseMaximumContextWindow(true);
 
@@ -39,7 +39,7 @@ catch (error) {
 }
 const shim = createWorkBuddyShim({ store, client, catalog });
 await shim.ready;
-const port = Number(process.env.WORKBUDDY_BRIDGE_PORT || 18347);
+const port = Number(process.env.WORKBUDDY_CN_BRIDGE_PORT || 18348);
 function json(res, status, data) {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(data));
@@ -50,7 +50,7 @@ function authorized(req) {
   return supplied.length === expected.length && timingSafeEqual(supplied, expected);
 }
 async function upstreamError(res, upstream) {
-  const text = await upstream.text().catch(() => '');
+  let text = await upstream.text().catch(() => '');
   let data;
   try { data = JSON.parse(text); } catch { data = { error: { message: text.slice(0, 400) || `upstream HTTP ${upstream.status}`, type: 'upstream_error' } }; }
   await log(`upstream error http=${upstream.status} message=${String(data?.error?.message ?? '').slice(0, 200)}`);
@@ -59,8 +59,8 @@ async function upstreamError(res, upstream) {
 const server = createServer(async (req, res) => {
   try {
     if (!authorized(req)) return json(res, 401, { error: { message: 'Invalid bridge key', type: 'authentication_error' } });
-    if (req.url === '/health' && req.method === 'GET') return json(res, 200, { ok: true, provider: 'workbuddy-ai', models: catalog.current().length });
-    if (req.url === '/v1/models' && req.method === 'GET') return json(res, 200, { object: 'list', data: catalog.current().map(m => ({ id: m.id, object: 'model', owned_by: 'workbuddy-ai' })) });
+    if (req.url === '/health' && req.method === 'GET') return json(res, 200, { ok: true, provider: 'workbuddy-cn', models: catalog.current().length });
+    if (req.url === '/v1/models' && req.method === 'GET') return json(res, 200, { object: 'list', data: catalog.current().map(m => ({ id: m.id, object: 'model', owned_by: 'workbuddy-cn' })) });
     if (req.url !== '/v1/chat/completions' || req.method !== 'POST') return json(res, 404, { error: { message: 'Not found' } });
     if (!/^application\/json(?:;|$)/i.test(req.headers['content-type'] || '')) return json(res, 415, { error: { message: 'JSON content type required' } });
     let size = 0;
@@ -124,9 +124,9 @@ const server = createServer(async (req, res) => {
 });
 server.requestTimeout = 300_000;
 await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', resolve); });
-await writeFile(join(state, 'runtime.json'), JSON.stringify({ pid: process.pid, port, provider: 'workbuddy-ai', baseUrl: `http://127.0.0.1:${port}/v1`, startedAt: new Date().toISOString() }));
-await log(`WorkBuddy AI bridge ready: http://127.0.0.1:${port}/v1 (${models.length} models)`);
-console.log(`WorkBuddy AI bridge ready: http://127.0.0.1:${port}/v1 (${models.length} models)`);
+await writeFile(join(state, 'runtime.json'), JSON.stringify({ pid: process.pid, port, provider: 'workbuddy-cn', baseUrl: `http://127.0.0.1:${port}/v1`, startedAt: new Date().toISOString() }));
+await log(`WorkBuddy CN bridge ready: http://127.0.0.1:${port}/v1 (${models.length} models)`);
+console.log(`WorkBuddy CN bridge ready: http://127.0.0.1:${port}/v1 (${models.length} models)`);
 const timer = setInterval(async () => {
   try {
     const refreshed = await client.fetchModels(await store.resolve());

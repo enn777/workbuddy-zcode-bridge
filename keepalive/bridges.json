@@ -1,0 +1,4 @@
+[
+  { "name": "workbuddy-ai", "port": 18347, "dir": "..", "providerId": "workbuddy-ai-local", "providerName": "WorkBuddy AI (Local)" },
+  { "name": "workbuddy-cn", "port": 18348, "dir": "../cn", "providerId": "workbuddy-cn-local", "providerName": "WorkBuddy CN (Local)" }
+]

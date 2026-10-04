@@ -10,7 +10,7 @@ function Test-BridgeHealth {
     } catch { return $false }
 }
 function Update-ZCodeProvider {
-    & $nodePath (Join-Path $bridgeRoot 'configure-zcode.mjs')
+    & $nodePath (Join-Path $bridgeRoot 'keepalive\configure-zcode.mjs')
     if ($LASTEXITCODE -ne 0) { throw 'Unable to configure ZCode.' }
 }
 $settingsPath = Join-Path $bridgeRoot 'settings.local.json'
@@ -49,7 +49,7 @@ if (Test-BridgeHealth) {
     exit 0
 }
 $bridgeArgs = '"' + (Join-Path $bridgeRoot 'bridge.mjs') + '"'
-$bridgeProcess = Start-Process -FilePath $nodePath -ArgumentList $bridgeArgs -WorkingDirectory $bridgeRoot -WindowStyle Hidden -RedirectStandardOutput (Join-Path $bridgeRoot 'bridge.log') -RedirectStandardError (Join-Path $bridgeRoot 'bridge-error.log') -PassThru
+$bridgeProcess = Start-Process -FilePath $nodePath -ArgumentList $bridgeArgs -WorkingDirectory $bridgeRoot -WindowStyle Hidden -RedirectStandardOutput (Join-Path $bridgeRoot 'bridge-stdout.log') -RedirectStandardError (Join-Path $bridgeRoot 'bridge-error.log') -PassThru
 Write-Output "Bridge starting (PID $($bridgeProcess.Id))."
 $readyDeadline = (Get-Date).AddSeconds(45)
 do {

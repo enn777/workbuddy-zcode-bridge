@@ -1,0 +1,37 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+const port = process.env.BRIDGE_PORT || '18348';
+const key = (await readFile(new URL('./state/bridge.key', import.meta.url), 'utf8')).trim();
+const base = `http://127.0.0.1:${port}`;
+const headers = { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' };
+assert.equal((await fetch(`${base}/v1/models`)).status, 401);
+const health = await (await fetch(`${base}/health`, { headers })).json();
+assert.equal(health.ok, true);
+console.log(`Authentication and health passed (${health.models} models).`);
+const catalog = JSON.parse(await readFile(new URL('./state/models.json', import.meta.url), 'utf8'));
+const preferred = ['glm-5.3-flash', 'glm-5.3', 'deepseek-v4.1-flash', 'kimi-k2.6'];
+const model = process.env.BRIDGE_MODEL || preferred.find(id => catalog.some(m => m.id === id));
+console.log(`Using model: ${model}`);
+const request = async body => {
+  const response = await fetch(`${base}/v1/chat/completions`, { method: 'POST', headers, body: JSON.stringify({ model, ...body }), signal: AbortSignal.timeout(120000) });
+  const text = await response.text();
+  let result; try { result = JSON.parse(text); } catch { result = { raw: text.slice(0, 200) }; }
+  assert.equal(response.status, 200, JSON.stringify(result));
+  return result;
+};
+const basic = await request({ stream: false, messages: [{ role: 'user', content: 'Reply with exactly OK.' }], max_tokens: 256 });
+assert.ok(basic.choices?.[0]?.message?.content);
+console.log('Chat response:', basic.choices[0].message.content);
+const messages = [{ role: 'user', content: 'Use the add tool to compute 2 plus 3. You must call the tool before answering.' }];
+const tools = [{ type: 'function', function: { name: 'add', description: 'Add two numbers', parameters: { type: 'object', properties: { a: { type: 'number' }, b: { type: 'number' } }, required: ['a', 'b'], additionalProperties: false } } }];
+const call = await request({ stream: false, messages, tools, tool_choice: 'auto', max_tokens: 1024 });
+const answer = call.choices[0].message;
+assert.equal(answer.tool_calls?.[0]?.function?.name, 'add', 'Model did not call add');
+const args = JSON.parse(answer.tool_calls[0].function.arguments);
+const continuation = await request({ stream: false, messages: [...messages, answer, { role: 'tool', tool_call_id: answer.tool_calls[0].id, content: String(args.a + args.b) }], tools, max_tokens: 1024 });
+assert.match(continuation.choices[0].message.content, /5/);
+console.log('Tool call and continuation passed.');
+const stream = await fetch(`${base}/v1/chat/completions`, { method: 'POST', headers, body: JSON.stringify({ model, stream: true, messages: [{ role: 'user', content: 'Reply with exactly OK.' }], max_tokens: 256 }), signal: AbortSignal.timeout(120000) });
+assert.equal(stream.status, 200);
+assert.match(await stream.text(), /data:.*\[DONE\]/);
+console.log('Streaming passed.');
